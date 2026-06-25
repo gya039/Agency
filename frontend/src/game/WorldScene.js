@@ -200,25 +200,26 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   _drawConduits() {
+    // Glowing lines from each world's center converging on the Nexus core.
+    // Drawn below the cells (depth 1) so only the between-cell segments show.
     const g = this.add.graphics().setDepth(1)
-    for (const [x1, y1, x2, y2] of this.layout.conduits) {
-      g.lineStyle(8, 0x1a2030, 1)
-      g.lineBetween(x1, y1, x2, y2)
-      g.lineStyle(2, 0x6ea8ff, 0.25)
-      g.lineBetween(x1, y1, x2, y2)
-      g.fillStyle(0x6ea8ff, 0.3)
-      g.fillCircle(x2, y2, 4)
+    const { cx: nx, cy: ny } = this.layout.nexus
+    for (const [x1, y1] of this.layout.conduits) {
+      g.lineStyle(9, 0x141a26, 1)
+      g.lineBetween(x1, y1, nx, ny)
+      g.lineStyle(2.5, 0x6ea8ff, 0.3)
+      g.lineBetween(x1, y1, nx, ny)
     }
   }
 
   _drawNexusCore() {
+    // The Nexus art has its own glowing core; this overlay is a subtle,
+    // traffic-reactive accent that sits at the conduit convergence point.
     const { cx, cy } = this.layout.nexus
-    this._coreXY = { x: cx, y: cy + 22 }
-    // Outer glow intensifies with traffic; inner core has a steady gentle pulse.
-    this.coreGlow = this.add.circle(cx, cy + 22, 40, 0x6ea8ff, 0.05).setDepth(4)
-    const core = this.add.circle(cx, cy + 22, 26, 0x6ea8ff, 0.16).setDepth(5)
-    const ring = this.add.circle(cx, cy + 22, 26, 0x000000, 0).setStrokeStyle(2, 0x6ea8ff, 0.7).setDepth(5)
-    this.tweens.add({ targets: [core, ring], scale: { from: 0.9, to: 1.12 }, alpha: { from: 0.9, to: 0.5 }, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.inOut' })
+    this._coreXY = { x: cx, y: cy }
+    this.coreGlow = this.add.circle(cx, cy, 52, 0x6ea8ff, 0.05).setDepth(2.4)
+    const ring = this.add.circle(cx, cy, 34, 0x000000, 0).setStrokeStyle(2, 0x6ea8ff, 0.45).setDepth(2.5)
+    this.tweens.add({ targets: ring, scale: { from: 0.85, to: 1.12 }, alpha: { from: 0.5, to: 0.12 }, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.inOut' })
   }
 
   _updateNexusCore(time) {

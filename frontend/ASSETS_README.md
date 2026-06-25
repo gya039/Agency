@@ -22,9 +22,15 @@ referenced in the manifest as `/assets/rooms/sugar.png`.
 
 ## Adding a ROOM image
 
-1. Generate a room interior in Higgsfield (one image per world). A landscape
-   ratio around **400×210** (or any multiple, e.g. 800×420) matches the cell;
-   it's scaled to fit, so exact size isn't critical.
+1. Generate a room interior in Higgsfield (one image per world). **Aspect ratio
+   doesn't need to match the cell** — the renderer uses **contain-fit**: it
+   preserves the image's aspect ratio, centers it in the cell, and fills any
+   leftover space with a dark letterbox (the art is never stretched/distorted).
+   So any reasonable ratio is fine; just **tight-crop to the lit room rectangle**
+   for the cleanest result (the tighter the crop, the less letterbox).
+   - World cells are landscape (~2.3:1). Wide-ish crops letterbox least there.
+   - The Nexus cell is larger and squarer (~1.5:1); a square-ish crop fits best.
+   - If a crop leaves a lot of letterbox, retighten the crop — no code change.
 2. Save it as `public/assets/rooms/<universe-id>.png` (ids: `sugar`, `iron`,
    `mend`, `redline`, `volt`, `dust`, plus `nexus`).
 3. That's it — the manifest already points at that path. Reload.

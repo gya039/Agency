@@ -53,7 +53,9 @@ export default class BootScene extends Phaser.Scene {
       }
     }
 
-    this.scene.start('WorldScene')
+    // Hand off after create() fully returns (escape Phaser's call stack so the
+    // scene-manager transition isn't started mid-create — that can stall it).
+    window.setTimeout(() => { const m = this.scene.manager; m.stop('BootScene'); m.start('WorldScene') }, 30)
   }
 
   _createAnims(key, a) {

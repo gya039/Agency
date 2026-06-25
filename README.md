@@ -29,7 +29,12 @@ pip install -r requirements.txt
 python app.py
 ```
 
-**Frontend** (Vite dev server on `:5173`):
+> **Interpreter note:** on this machine the shell's default `python` resolves to
+> a `hermes-agent` venv that has no Flask. Launch the backend with the pythoncore
+> interpreter explicitly:
+> `"C:\Users\yanka\AppData\Local\Python\pythoncore-3.14-64\python.exe" app.py`
+
+**Frontend** (Vite dev server on `:5174`):
 
 ```bash
 cd frontend
@@ -37,11 +42,11 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL it prints (http://localhost:5173). The HUD loads with ~8
-seeded agents across 4 worlds, two idle cartridges, and a couple of jobs already
-running. A gentle **autopilot** keeps a trickle of jobs flowing so the HUD stays
-alive on its own; deploy your own jobs and watch agents move in, work, earn XP,
-and burn tokens.
+Open the Vite URL it prints (http://localhost:5174). The Phaser world loads with
+the six-strong cast in their home rooms around **The Nexus** hub, and a couple of
+jobs already running. A gentle **autopilot** keeps a trickle of jobs flowing so
+the world stays alive on its own; deploy your own jobs and watch agents walk into
+a room, work, earn XP, and burn tokens.
 
 ## Configuration (`backend/.env`)
 
