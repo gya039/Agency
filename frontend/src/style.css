@@ -124,6 +124,17 @@ body {
 .prow.hist { gap: 7px; }
 .prow.hist > span:nth-child(2) { flex: 1; }
 
+/* audio controls (gutter bottom) */
+.audiobar { position: relative; flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); }
+#side.collapsed .audiobar { display: none; }
+.aud-btn { background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; padding: 4px 7px; }
+.aud-btn:hover { border-color: #6ea8ff; }
+.aud-btn.off { opacity: 0.4; }
+.aud-vol { flex: 1; min-width: 40px; height: 4px; accent-color: #6ea8ff; cursor: pointer; }
+.aud-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; color: #ffb020; background: rgba(22, 26, 37, 0.97); cursor: pointer; letter-spacing: 0.02em; }
+.aud-hint::before { content: '🔊'; }
+.aud-hint.hidden { display: none; }
+
 /* room / agent panel: lives INSIDE the gutter, overlaying the log only */
 .panel {
   position: absolute; top: 43px; left: 0; right: 0; bottom: 0; z-index: 6;

@@ -15,6 +15,7 @@ import Agent from './Agent.js'
 import {
   initOverlay, updateHud, setLog, setQueue, showRoomPanel, showAgentPanel, setOffline,
 } from '../overlay.js'
+import { audio } from '../audio.js'
 
 const POLL_MS = 1500
 
@@ -26,6 +27,12 @@ export default class WorldScene extends Phaser.Scene {
     this.lastXp = new Map()
     this.lastJobStatus = new Map()
     this.lastState = null
+    // audio diff trackers
+    this._lastLevel = null
+    this._lastLogId = null
+    this._activeSessions = new Map() // session id -> { kind, agent_ids }
+    this._seenPairs = new Set()
+    this._pairingPrimed = false
   }
 
   create() {
@@ -42,6 +49,7 @@ export default class WorldScene extends Phaser.Scene {
     // Bind interaction handlers used by Room/Agent.
     this.onRoomClick = (worldId) => showRoomPanel(worldId)
     this.onAgentClick = (id) => showAgentPanel(id)
+    this.onAgentArrive = () => audio.play('agentArrive') // throttled in audio.js
 
     initOverlay({
       getState: () => this.lastState,
@@ -49,6 +57,7 @@ export default class WorldScene extends Phaser.Scene {
       worlds: WORLDS,
       onResize: () => this.scale.refresh(), // gutter collapse/expand -> re-fit board
       onEnqueue: async (worldId, title, n) => {
+        audio.play('deploy') // confident launch blip on a deliberate deploy
         await api.enqueue({ title, world: BACKEND_FROM_WORLD[worldId], agents_required: n })
         this.poll()
       },
@@ -105,13 +114,65 @@ export default class WorldScene extends Phaser.Scene {
       updateHud(state, usage)
       setLog(log)
       setQueue(queue)
+      this._audioDiff(state, log, queue)
     } catch (e) {
       // Keep rendering the last good snapshot; just flag reconnecting.
+      if (this._fails === 0) audio.play('reconnect') // soft tone on first drop
       this._fails += 1
       setOffline(true)
     } finally {
       this._scheduleNext(this._fails > 0 ? 3000 : POLL_MS)
     }
+  }
+
+  // Fire SFX off the diffs already computed each poll — no new state invented.
+  _audioDiff(state, log, queue) {
+    // Level up — the most prominent sound.
+    if (this._lastLevel != null && state.level > this._lastLevel) audio.play('levelUp')
+    this._lastLevel = state.level
+
+    // Ambient collab forming — new 'collab' mission-log events (log is newest-first).
+    if (log && log.length) {
+      if (this._lastLogId == null) {
+        this._lastLogId = log[0].id
+      } else {
+        const fresh = log.filter((e) => e.id > this._lastLogId)
+        if (fresh.some((e) => e.kind === 'collab')) audio.play('collabForming')
+        this._lastLogId = log[0].id
+      }
+    }
+
+    // Job complete + first-this-session pairings — tracked via the queue
+    // (which carries kind + agent_ids; /state jobs do not).
+    const current = new Set((queue || []).map((j) => j.id))
+    for (const [id, info] of this._activeSessions) {
+      if (current.has(id)) continue
+      if (this._pairingPrimed) {
+        if (info.kind === 'job') audio.play('jobComplete')
+        let fresh = false
+        const ids = [...info.agent_ids].sort()
+        for (let i = 0; i < ids.length; i++) {
+          for (let k = i + 1; k < ids.length; k++) {
+            const key = ids[i] + '|' + ids[k]
+            if (!this._seenPairs.has(key)) { this._seenPairs.add(key); fresh = true }
+          }
+        }
+        if (fresh) audio.play('newPairing')
+      }
+      this._activeSessions.delete(id)
+    }
+    for (const j of (queue || [])) {
+      if (j.status === 'running' && j.agent_ids && j.agent_ids.length) {
+        this._activeSessions.set(j.id, { kind: j.kind, agent_ids: j.agent_ids })
+        if (!this._pairingPrimed) {
+          const ids = [...j.agent_ids].sort() // pre-seed so startup isn't a burst
+          for (let i = 0; i < ids.length; i++) {
+            for (let k = i + 1; k < ids.length; k++) this._seenPairs.add(ids[i] + '|' + ids[k])
+          }
+        }
+      }
+    }
+    this._pairingPrimed = true
   }
 
   _ensureAgentTexture(identity) {
@@ -201,6 +262,10 @@ export default class WorldScene extends Phaser.Scene {
       }
       this.lastJobStatus.set(j.id, j.status)
     }
+
+    // Gently feed the ambience bed: busier floor -> a touch more presence.
+    const working = state.agents.reduce((n, a) => n + (a.status === 'working' ? 1 : 0), 0)
+    audio.setActivity((working + traffic) / Math.max(1, state.agents.length))
   }
 
   _drawConduits() {

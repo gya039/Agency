@@ -3,6 +3,10 @@ import './style.css'
 import BootScene from './game/BootScene.js'
 import WorldScene from './game/WorldScene.js'
 import { DESIGN_W, DESIGN_H } from './game/layout.js'
+import { audio } from './audio.js'
+
+// Arm the audio layer (silent until the first user gesture; never blocks).
+audio.init()
 
 // Silence EXPECTED missing-art loader errors (placeholder fallback by design)
 // so they don't bury real errors. Drop this filter the day real art lands.

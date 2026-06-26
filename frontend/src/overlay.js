@@ -5,6 +5,7 @@
 // (the truth is always the snapshot — we only interpolate).
 
 import { WORLD_BY_ID, WORLD_FROM_BACKEND, CAST, AGENT_FROM_BACKEND } from './universe.config.js'
+import { audio } from './audio.js'
 
 let cb = {}
 let els = {}
@@ -84,7 +85,13 @@ function buildSide() {
       <div class="queue-head">QUEUE <span class="dim" id="queue-count">0</span></div>
       <div class="queue-list" id="queue-list"></div>
     </div>
-    <div class="mlog"><div class="mlog-feed" id="mlog-feed"></div></div>`
+    <div class="mlog"><div class="mlog-feed" id="mlog-feed"></div></div>
+    <div class="audiobar" id="audiobar">
+      <button class="aud-btn" id="aud-mute" title="Mute / unmute">🔊</button>
+      <input class="aud-vol" id="aud-vol" type="range" min="0" max="100" title="Volume" />
+      <button class="aud-btn" id="aud-amb" title="Ambience on / off">🎵</button>
+      <span class="aud-hint" id="aud-hint">click to enable sound</span>
+    </div>`
   els.side = side
   els.panel = q('#panel')
   els.logFeed = q('#mlog-feed')
@@ -92,6 +99,29 @@ function buildSide() {
   els.queueCount = q('#queue-count')
   els.toggle = q('#side-toggle')
   els.toggle.onclick = () => setCollapsed(!side.classList.contains('collapsed'))
+  buildAudioBar()
+}
+
+// Audio controls (mute, master volume, ambience on/off) + the "click to enable"
+// hint that clears once the browser unlocks audio on the first gesture.
+function buildAudioBar() {
+  const p = audio.getPrefs()
+  els.audMute = q('#aud-mute')
+  els.audVol = q('#aud-vol')
+  els.audAmb = q('#aud-amb')
+  els.audHint = q('#aud-hint')
+
+  els.audVol.value = Math.round(p.master * 100)
+  const paintMute = () => { els.audMute.textContent = audio.getPrefs().muted ? '🔇' : '🔊'; els.audMute.classList.toggle('off', audio.getPrefs().muted) }
+  const paintAmb = () => els.audAmb.classList.toggle('off', !audio.getPrefs().ambienceOn)
+  paintMute(); paintAmb()
+
+  els.audMute.onclick = () => { audio.setMuted(!audio.getPrefs().muted); paintMute() }
+  els.audVol.oninput = () => audio.setMaster(+els.audVol.value / 100)
+  els.audAmb.onclick = () => { audio.setAmbienceOn(!audio.getPrefs().ambienceOn); paintAmb() }
+
+  if (audio.isUnlocked()) els.audHint.classList.add('hidden')
+  audio.onUnlock(() => els.audHint.classList.add('hidden'))
 }
 
 // Queued + running jobs (Part B). 'ambient' sessions are tagged distinctly.

@@ -198,6 +198,7 @@ export default class Agent {
     const p = this._pending
     this._pending = null
     this._applyVisual(p ? p.status : 'idle', p ? p.accentColor : undefined)
+    if (this.scene.onAgentArrive) this.scene.onAgentArrive() // soft footstep (throttled)
   }
 
   popXp(amount) {
