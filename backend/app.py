@@ -60,6 +60,21 @@ def post_enqueue():
     return jsonify({"ok": True, "job": job}), 201
 
 
+@app.get("/agents/<agent_id>")
+def get_agent(agent_id):
+    """Agent detail: live fields + job history + top collaborators (additive)."""
+    detail = state.agent_detail(agent_id)
+    if detail is None:
+        return jsonify({"error": "agent not found"}), 404
+    return jsonify(detail)
+
+
+@app.get("/queue")
+def get_queue():
+    """Current job queue (queued + running) in order (additive)."""
+    return jsonify(state.snapshot_queue())
+
+
 @app.post("/agents")
 def post_agents():
     data = request.get_json(force=True, silent=True) or {}

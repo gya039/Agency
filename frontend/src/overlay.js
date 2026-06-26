@@ -80,12 +80,36 @@ function buildSide() {
       <span class="side-title">MISSION LOG <span class="dim">append-only</span></span>
     </div>
     <div class="panel hidden" id="panel"></div>
+    <div class="queue">
+      <div class="queue-head">QUEUE <span class="dim" id="queue-count">0</span></div>
+      <div class="queue-list" id="queue-list"></div>
+    </div>
     <div class="mlog"><div class="mlog-feed" id="mlog-feed"></div></div>`
   els.side = side
   els.panel = q('#panel')
   els.logFeed = q('#mlog-feed')
+  els.queueList = q('#queue-list')
+  els.queueCount = q('#queue-count')
   els.toggle = q('#side-toggle')
   els.toggle.onclick = () => setCollapsed(!side.classList.contains('collapsed'))
+}
+
+// Queued + running jobs (Part B). 'ambient' sessions are tagged distinctly.
+export function setQueue(jobs) {
+  els.queueCount.textContent = jobs.length
+  if (!jobs.length) {
+    els.queueList.innerHTML = '<div class="dim small queue-empty">— floor idle —</div>'
+    return
+  }
+  els.queueList.innerHTML = jobs.map((j) => {
+    const world = WORLD_BY_ID[WORLD_FROM_BACKEND[j.world]]
+    const tag = j.kind === 'ambient' ? '<span class="qtag amb">co-work</span>' : ''
+    return `<div class="qrow">
+      <span class="qdot" style="background:${world ? world.accentCss : '#6ea8ff'}"></span>
+      <span class="qtitle">${esc(j.title)}${tag}</span>
+      <span class="qmeta mono dim">${j.agents_required}· ${j.status}</span>
+    </div>`
+  }).join('')
 }
 
 function setCollapsed(collapsed) {
@@ -141,7 +165,7 @@ export function showRoomPanel(worldId) {
   els.panel.classList.remove('hidden')
 }
 
-export function showAgentPanel(agentId) {
+export async function showAgentPanel(agentId) {
   const state = cb.getState && cb.getState()
   if (!state) return
   if (els.side.classList.contains('collapsed')) setCollapsed(false)
@@ -150,22 +174,48 @@ export function showAgentPanel(agentId) {
   const castKey = AGENT_FROM_BACKEND[a.id]
   const trait = castKey ? CAST[castKey].trait : 'runtime unit'
   const world = WORLD_BY_ID[WORLD_FROM_BACKEND[a.current_world]]
-  els.panel.innerHTML = `
-    <div class="panel-head" style="--accent:${world?.accentCss || '#6ea8ff'}">
-      <span class="pdot"></span><b>${esc(a.name)}</b>
-      <button class="x" id="panel-x">×</button>
-    </div>
-    <div class="panel-sub dim">${esc(trait)}</div>
-    <div class="prow"><span>Status</span><span class="mono">${a.status}</span></div>
-    <div class="prow"><span>World</span><span class="mono">${world ? esc(world.name) : a.current_world}</span></div>
-    <div class="prow"><span>XP</span><span class="mono">${fmt(a.xp)}</span></div>
-    <div class="prow"><span>Tokens used</span><span class="mono">${fmt(a.tokens_used)}</span></div>
-    <div class="panel-actions">
-      <button class="btn ghost" id="panel-rm">Remove agent</button>
-    </div>`
-  q('#panel-x').onclick = hidePanel
-  q('#panel-rm').onclick = async () => { await cb.onRemoveAgent(a.id); hidePanel() }
+  const homeName = (wb) => { const w = WORLD_BY_ID[WORLD_FROM_BACKEND[wb]]; return w ? w.name : wb }
+
+  const render = (detail) => {
+    const history = (detail && detail.history) || []
+    const collabs = (detail && detail.collaborators) || []
+    els.panel.innerHTML = `
+      <div class="panel-head" style="--accent:${world?.accentCss || '#6ea8ff'}">
+        <span class="pdot"></span><b>${esc(a.name)}</b>
+        <button class="x" id="panel-x">×</button>
+      </div>
+      <div class="panel-sub dim">${esc(trait)}</div>
+      <div class="prow"><span>Status</span><span class="mono">${a.status}</span></div>
+      <div class="prow"><span>World</span><span class="mono">${world ? esc(world.name) : a.current_world}</span></div>
+      <div class="prow"><span>Home</span><span class="mono">${detail ? esc(homeName(detail.home_world)) : '…'}</span></div>
+      <div class="prow"><span>XP</span><span class="mono">${fmt(a.xp)}</span></div>
+      <div class="prow"><span>Tokens used</span><span class="mono">${fmt(a.tokens_used)}</span></div>
+      <div class="panel-section">Top collaborators</div>
+      ${collabs.length
+        ? collabs.map((c) => `<div class="prow"><span>${esc(c.name)}</span><span class="mono dim">×${c.count}</span></div>`).join('')
+        : '<div class="dim small">— none yet —</div>'}
+      <div class="panel-section">Recent sessions</div>
+      ${history.length
+        ? history.slice(0, 8).map((h) => `<div class="prow hist">
+            <span class="qdot" style="background:${(WORLD_BY_ID[WORLD_FROM_BACKEND[h.world]] || {}).accentCss || '#6ea8ff'}"></span>
+            <span>${esc(h.title)}${h.kind === 'ambient' ? ' <span class="qtag amb">co-work</span>' : ''}</span>
+            <span class="mono dim">${fmt(h.tokens)}t</span>
+          </div>`).join('')
+        : '<div class="dim small">— no history —</div>'}
+      <div class="panel-actions">
+        <button class="btn ghost" id="panel-rm">Remove agent</button>
+      </div>`
+    q('#panel-x').onclick = hidePanel
+    q('#panel-rm').onclick = async () => { await cb.onRemoveAgent(a.id); hidePanel() }
+  }
+
+  render(null)                 // instant: live fields
   els.panel.classList.remove('hidden')
+  els.panel.dataset.agent = agentId
+  try {
+    const detail = await cb.getAgent(agentId)   // fetch history + collaborators
+    if (els.panel.dataset.agent === agentId && !els.panel.classList.contains('hidden')) render(detail)
+  } catch (e) { /* keep the instant render */ }
 }
 
 function agentRow(a) {

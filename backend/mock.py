@@ -43,8 +43,19 @@ def random_name(taken=()):
     return f"Unit-{random.randint(10, 99)}"
 
 
+# Ambient co-work sessions (Part C) — agents hanging out, not a deployed job.
+AMBIENT_TITLES = [
+    "Knowledge share", "Pair debug", "Design huddle", "Sync session",
+    "Code review jam", "Whiteboard session", "Retro chat", "Brainstorm",
+]
+
+
 def random_job_title():
     return random.choice(JOB_TITLES)
+
+
+def random_ambient_title():
+    return random.choice(AMBIENT_TITLES)
 
 
 def seed_agents():
@@ -62,7 +73,7 @@ def seed_agents():
     return [
         {
             "id": aid, "name": name, "status": "idle",
-            "current_world": world, "current_job": None,
+            "home_world": world, "current_world": world, "current_job": None,
             "xp": xp, "tokens_used": tokens,
         }
         for (aid, name, world, xp, tokens) in seeds

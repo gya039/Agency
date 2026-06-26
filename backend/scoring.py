@@ -8,6 +8,9 @@ BASE_XP = 50            # XP awarded to EACH participating agent, per job
 XP_TOKEN_BONUS = 15     # extra XP per full 1k tokens processed (per agent)
 XP_PER_LEVEL = 1000     # XP needed to advance one level
 
+AMBIENT_BASE_XP = 12    # small shared XP per ambient co-work session (vs BASE_XP)
+AMBIENT_TOKEN_BONUS = 3  # extra ambient XP per full 1k tokens
+
 THROUGHPUT_WINDOW = 5.0  # seconds — rolling window used for tokens/sec
 
 
@@ -17,6 +20,11 @@ def job_xp(agents_required, tokens):
     base_xp * agents_required, plus a small bonus per 1k tokens processed.
     """
     return BASE_XP * agents_required + (tokens // 1000) * XP_TOKEN_BONUS
+
+
+def ambient_xp(tokens):
+    """XP granted to each agent for a (smaller) ambient co-work session."""
+    return AMBIENT_BASE_XP + (tokens // 1000) * AMBIENT_TOKEN_BONUS
 
 
 def level_from_xp(total_xp):

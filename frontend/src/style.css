@@ -108,6 +108,22 @@ body {
 .mlog-text { font-size: 12px; line-height: 1.35; }
 .mlog-time { font-size: 10px; }
 
+/* queue view (Part B) */
+.queue { flex: none; max-height: 32%; display: flex; flex-direction: column; border-bottom: 1px solid var(--line); }
+#side.collapsed .queue { display: none; }
+.queue-head { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--muted); padding: 9px 10px 5px; }
+.queue-head .dim { color: var(--text); }
+.queue-list { overflow-y: auto; padding: 0 8px 6px; }
+.queue-empty { padding: 4px 2px 8px; }
+.qrow { display: flex; align-items: center; gap: 7px; padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.qdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.qtitle { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.qmeta { font-size: 10px; white-space: nowrap; }
+.qtag { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 5px; border-radius: 999px; flex: none; }
+.qtag.amb { color: #9b7bff; background: color-mix(in srgb, #9b7bff 16%, transparent); }
+.prow.hist { gap: 7px; }
+.prow.hist > span:nth-child(2) { flex: 1; }
+
 /* room / agent panel: lives INSIDE the gutter, overlaying the log only */
 .panel {
   position: absolute; top: 43px; left: 0; right: 0; bottom: 0; z-index: 6;

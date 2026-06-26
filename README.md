@@ -84,6 +84,31 @@ truth); the data contract (`/state`, `/usage`) is frozen.
 | `POST` | `/enqueue` | `{title, world, agents_required}` → queue a job |
 | `POST` | `/agents` | `{name?, world?}` → add an agent |
 | `DELETE` | `/agents/<id>` | remove an agent |
+| `GET` | `/agents/<id>` | agent detail: home, status, xp, job history, top collaborators |
+| `GET` | `/queue` | current job queue (queued + running) in order |
+
+`/state`, `/usage`, `/log` shapes are frozen; `/agents/<id>` and `/queue` are
+additive.
+
+## Persistence
+
+State is an append-only SQLite ledger at `backend/agency.db` (created on first
+run; git-ignored — it's runtime state, not source). All SQL lives in
+[`backend/db.py`](backend/db.py); `state.py` calls into it. Agents, jobs (real +
+ambient), the mission log, per-agent XP/token awards, and pair-collaboration
+counts persist, so XP/tokens/collaborations resume across restarts instead of
+reseeding. On first run (empty DB) it seeds from `mock.py` and persists that
+seed. Delete `agency.db*` to reset to a fresh seed.
+
+## Ambient life
+
+Beyond deployed jobs, idle agents **roam** between worlds (drifting toward their
+home) and occasionally **cluster for a short ambient co-work session** — a
+smaller, agent-initiated collaboration that still earns a little XP. Every
+co-work (job or ambient) bumps a pair-collaboration count, surfaced in the agent
+panel as "top collaborators." Tune frequency/timing in the `SIM` block at the
+top of [`backend/worker.py`](backend/worker.py); the visual travel speed is in
+`frontend/src/game/Agent.js`.
 
 ## Layout
 

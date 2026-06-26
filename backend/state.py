@@ -10,6 +10,7 @@ import random
 import threading
 import itertools
 
+import db
 import mock
 import scoring
 
@@ -62,24 +63,81 @@ def world_roster(world_id):
 
 
 def log_event(kind, text):
-    """Append-only. Never mutate a past event."""
-    mission_log.append({
-        "id": next(_log_seq),
-        "ts": time.time(),
-        "kind": kind,
-        "text": text,
-    })
+    """Append-only. Mirrored to the DB ledger. Never mutate a past event."""
+    ev = {"id": next(_log_seq), "ts": time.time(), "kind": kind, "text": text}
+    mission_log.append(ev)
+    db.append_event(ev["ts"], kind, text)
+
+
+def record_award(agent_id, job_id, kind, xp_delta, tokens_delta):
+    """Append an immutable XP/token award to the ledger (reconstructable history)."""
+    db.append_agent_event(time.time(), agent_id, job_id, kind, xp_delta, tokens_delta)
+
+
+def record_collab(agent_ids):
+    """Bump the pair-collaboration count for every pair among participants."""
+    ids = list(agent_ids)
+    for i in range(len(ids)):
+        for k in range(i + 1, len(ids)):
+            db.bump_collab(ids[i], ids[k])
+
+
+def _resync_id_counters():
+    """Continue id sequences past anything already persisted."""
+    global _agent_seq, _job_seq
+
+    def _max_suffix(ids, prefix):
+        nums = [int(i[len(prefix):]) for i in ids
+                if i.startswith(prefix) and i[len(prefix):].isdigit()]
+        return max(nums) if nums else 99
+
+    _agent_seq = itertools.count(_max_suffix(list(agents.keys()), "a") + 1)
+    _job_seq = itertools.count(_max_suffix([j["id"] for j in jobs], "j") + 1)
 
 
 def init():
-    """Seed the store so the HUD looks alive on first load."""
+    """Load persisted state if present; otherwise seed from mock and persist it."""
+    db.init_db()
     with lock:
-        for a in mock.seed_agents():
-            agents[a["id"]] = a
-        for j in mock.seed_jobs():
-            j["id"] = next_job_id()
-            jobs.append(j)
+        if db.is_empty():
+            _seed_and_persist()
+        else:
+            _load_from_db()
         log_event("system", "The Nexus online.")
+
+
+def _seed_and_persist():
+    for a in mock.seed_agents():
+        agents[a["id"]] = a
+        db.upsert_agent(a)
+    for j in mock.seed_jobs():
+        j["id"] = next_job_id()
+        j.setdefault("kind", "job")
+        jobs.append(j)
+        db.upsert_job(j)
+
+
+def _load_from_db():
+    """Rebuild the in-memory store from the DB, normalizing in-flight state."""
+    data = db.load_all()
+    for a in data["agents"]:
+        # No work survives a restart: park everyone idle where they were.
+        a["status"] = "idle"
+        a["current_job"] = None
+        a.setdefault("home_world", a["current_world"])
+        agents[a["id"]] = a
+    for j in data["jobs"]:
+        if j["status"] == "running":
+            j["status"] = "done"
+            if not j.get("finished_at"):
+                j["finished_at"] = time.time()
+            db.upsert_job(j)
+        j.setdefault("kind", "job")
+        jobs.append(j)
+    for ev in data["events"]:
+        mission_log.append({"id": next(_log_seq), "ts": ev["ts"],
+                            "kind": ev["kind"], "text": ev["text"]})
+    _resync_id_counters()
 
 
 # --- Snapshots (read paths for the routes) ---------------------------------
@@ -159,6 +217,7 @@ def enqueue(title, world, agents_required):
         agents_required = max(1, min(3, int(agents_required)))
         job = {
             "id": next_job_id(),
+            "kind": "job",
             "title": (title or "").strip() or "Untitled job",
             "world": world,
             "agents_required": agents_required,
@@ -169,11 +228,35 @@ def enqueue(title, world, agents_required):
             "agent_ids": [],
         }
         jobs.append(job)
+        db.upsert_job(job)
         plural = "s" if agents_required > 1 else ""
         log_event("deploy", f'Job queued — "{job["title"]}" -> '
                             f'{world_name(world)} ({agents_required} agent{plural})')
         return {k: job[k] for k in
                 ("id", "title", "world", "agents_required", "status", "tokens")}
+
+
+def enqueue_ambient(world, agents_required, title):
+    """Queue an ambient co-work session (agents choosing to collaborate).
+    Same job pipeline as real jobs, but flagged 'ambient' with gentler rewards."""
+    with lock:
+        job = {
+            "id": next_job_id(),
+            "kind": "ambient",
+            "title": title,
+            "world": world,
+            "agents_required": agents_required,
+            "status": "queued",
+            "tokens": 0,
+            "created_at": time.time(),
+            "finished_at": None,
+            "agent_ids": [],
+        }
+        jobs.append(job)
+        db.upsert_job(job)
+        log_event("collab", f'{title} forming in {world_name(world)} '
+                            f'({agents_required} agents)')
+        return job
 
 
 def add_agent(name=None, world=None):
@@ -186,12 +269,14 @@ def add_agent(name=None, world=None):
             "id": next_agent_id(),
             "name": name or mock.random_name(taken=[a["name"] for a in agents.values()]),
             "status": "idle",
+            "home_world": world,
             "current_world": world,
             "current_job": None,
             "xp": 0,
             "tokens_used": 0,
         }
         agents[agent["id"]] = agent
+        db.upsert_agent(agent)
         log_event("agent_add", f'{agent["name"]} joined {world_name(world)}.')
         return {k: agent[k] for k in
                 ("id", "name", "status", "current_world", "current_job", "xp", "tokens_used")}
@@ -201,5 +286,42 @@ def remove_agent(agent_id):
     with lock:
         agent = agents.pop(agent_id, None)
         if agent:
+            db.delete_agent(agent_id)
             log_event("agent_remove", f'{agent["name"]} left the arcade.')
         return agent is not None
+
+
+# --- Part B read helpers ---------------------------------------------------
+
+def agent_detail(agent_id):
+    """Live agent fields + persisted job history + top collaborators."""
+    with lock:
+        a = agents.get(agent_id)
+        live = dict(a) if a else None
+    if live is None:
+        return None
+    collaborators = db.get_collaborators(agent_id)
+    name_of = {x["id"]: x["name"] for x in agents.values()}
+    for c in collaborators:
+        c["name"] = name_of.get(c["id"], c["id"])
+    return {
+        "id": live["id"], "name": live["name"], "home_world": live.get("home_world"),
+        "status": live["status"], "current_world": live["current_world"],
+        "current_job": live.get("current_job"), "xp": live["xp"],
+        "tokens_used": live["tokens_used"],
+        "history": db.get_agent_jobs(agent_id),
+        "collaborators": collaborators,
+    }
+
+
+def snapshot_queue():
+    """Active jobs (queued + running) in queue order."""
+    with lock:
+        active = [j for j in jobs if j["status"] in ("queued", "running")]
+        active.sort(key=lambda j: j["created_at"])
+        return [
+            {"id": j["id"], "kind": j.get("kind", "job"), "title": j["title"],
+             "world": j["world"], "agents_required": j["agents_required"],
+             "status": j["status"], "agent_ids": j.get("agent_ids", [])}
+            for j in active
+        ]

@@ -13,7 +13,7 @@ import { makeAgentTexture } from './placeholders.js'
 import Room from './Room.js'
 import Agent from './Agent.js'
 import {
-  initOverlay, updateHud, setLog, showRoomPanel, showAgentPanel, setOffline,
+  initOverlay, updateHud, setLog, setQueue, showRoomPanel, showAgentPanel, setOffline,
 } from '../overlay.js'
 
 const POLL_MS = 1500
@@ -45,6 +45,7 @@ export default class WorldScene extends Phaser.Scene {
 
     initOverlay({
       getState: () => this.lastState,
+      getAgent: (id) => api.agent(id), // agent detail: history + collaborators
       worlds: WORLDS,
       onResize: () => this.scale.refresh(), // gutter collapse/expand -> re-fit board
       onEnqueue: async (worldId, title, n) => {
@@ -94,13 +95,16 @@ export default class WorldScene extends Phaser.Scene {
 
   async poll() {
     try {
-      const [state, usage, log] = await Promise.all([api.state(), api.usage(), api.log()])
+      const [state, usage, log, queue] = await Promise.all([
+        api.state(), api.usage(), api.log(), api.queue(),
+      ])
       this._fails = 0
       setOffline(false)
       this.lastState = state
       this.applyState(state)
       updateHud(state, usage)
       setLog(log)
+      setQueue(queue)
     } catch (e) {
       // Keep rendering the last good snapshot; just flag reconnecting.
       this._fails += 1
